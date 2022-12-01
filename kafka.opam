@@ -12,9 +12,9 @@ homepage: "https://github.com/didier-wenzek/ocaml-kafka"
 doc: "https://didier-wenzek.github.io/ocaml-kafka"
 bug-reports: "https://github.com/didier-wenzek/ocaml-kafka/issues"
 depends: [
+  "dune" {>= "2.0"}
   "ocaml" {>= "4.02.3"}
   "conf-zlib"
-  "dune" {>= "1.10"}
 ]
 build: [
   ["dune" "subst"] {pinned}

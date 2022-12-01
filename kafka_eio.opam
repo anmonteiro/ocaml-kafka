@@ -13,12 +13,9 @@ doc: "https://didier-wenzek.github.io/ocaml-kafka"
 bug-reports: "https://github.com/didier-wenzek/ocaml-kafka/issues"
 depends: [
   "dune" {>= "2.0"}
-  "ocaml" {>= "4.03.0"}
-  "ppx_let" {>= "v0.16"}
+  "ocaml" {>= "5.0"}
   "kafka" {= version}
-  "async" {>= "v0.16"}
-  "core" {>= "v0.16"}
-  "core_unix" {>= "v0.16"}
+  "eio"
 ]
 build: [
   ["dune" "subst"] {pinned}

@@ -13,8 +13,7 @@
   (name kafka)
   (depends
     (ocaml (>= 4.02.3))
-    conf-zlib
-    (dune (>= 1.10)))
+    conf-zlib)
   (synopsis "OCaml bindings for Kafka")
   (description "
 Kafka is a high-throughput distributed messaging system.
@@ -27,8 +26,7 @@ Kafka is a high-throughput distributed messaging system.
     (kafka (= :version))
     (cmdliner (>= 1.1.0))
     lwt
-    conf-zlib
-    (dune (>= 1.10)))
+    conf-zlib)
   (synopsis "OCaml bindings for Kafka, Lwt bindings")
   (description "
 Kafka is a high-throughput distributed messaging system.
@@ -42,9 +40,20 @@ Kafka is a high-throughput distributed messaging system.
     (kafka (= :version))
     (async (>= v0.16))
     (core (>= v0.16))
-    (core_unix (>= v0.16))
-    (dune (>= 1.10)))
+    (core_unix (>= v0.16)))
   (synopsis "OCaml bindings for Kafka, Async bindings")
   (description "
 Kafka is a high-throughput distributed messaging system.
 "))
+
+(package
+  (name kafka_eio)
+  (depends
+    (ocaml (>= 5.0))
+    (kafka (= :version))
+    eio)
+  (synopsis "OCaml bindings for Kafka, Async bindings")
+  (description "
+Kafka is a high-throughput distributed messaging system.
+"))
+
