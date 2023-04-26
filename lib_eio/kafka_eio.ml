@@ -28,42 +28,49 @@ module Async = struct
 end
 
 module Stream : sig
-  type _ t
+  type push
+  type from
+  type ('a, 'kind) t
 
-  val empty : unit -> _ t
-  val from : f:(unit -> 'a option) -> 'a t
-  val create : int -> 'a t * ('a option -> unit)
+  val empty : unit -> ('a, push) t
+  val from : f:(unit -> 'a option) -> ('a, from) t
+  val create : int -> ('a, push) t
+  val push : ('a, push) t -> 'a -> unit
   val close : _ t -> unit
   val closed : _ t -> unit Eio.Promise.t
   val when_closed : f:(unit -> unit) -> _ t -> unit
   val is_closed : _ t -> bool
-  val take : 'a t -> 'a option
-  val of_list : 'a list -> 'a t
-  val to_list : 'a t -> 'a list
-  val map : f:('a -> 'b) -> 'a t -> 'b t
-  val iter : f:('a -> unit) -> 'a t -> unit
-  val iter_p : sw:Eio.Switch.t -> f:('a -> unit) -> 'a t -> unit
-  val fold : f:('acc -> 'a -> 'acc) -> init:'acc -> 'a t -> 'acc
+  val take : ('a, _) t -> 'a option
+  val of_list : 'a list -> ('a, push) t
+  val to_list : ('a, _) t -> 'a list
+  val map : f:('a -> 'b) -> ('a, _) t -> ('b, from) t
+  val iter : f:('a -> unit) -> ('a, _) t -> unit
+  val iter_p : sw:Eio.Switch.t -> f:('a -> unit) -> ('a, _) t -> unit
+  val fold : f:('acc -> 'a -> 'acc) -> init:'acc -> ('a, _) t -> 'acc
   val drain : _ t -> unit
   val drain_available : _ t -> unit
 end = struct
   open Eio.Std
 
-  type 'a kind =
-    | From of (unit -> 'a option)
-    | Push of
+  type push = |
+  type from = |
+
+  type ('a, _) kind =
+    | From : (unit -> 'a option) -> ('a, from) kind
+    | Push :
         { stream : 'a Eio.Stream.t
         ; capacity : int
         }
+        -> ('a, push) kind
 
-  type 'a t =
-    { stream : 'a kind
+  type ('a, 'b) t =
+    { stream : ('a, 'b) kind
     ; is_closed : bool Atomic.t
     ; closed : unit Promise.t * unit Promise.u
     }
 
   let unsafe_eio_stream { stream; _ } =
-    match stream with From _ -> assert false | Push { stream; _ } -> stream
+    match stream with Push { stream; _ } -> stream
 
   let is_closed { is_closed; _ } = Atomic.get is_closed
 
@@ -76,7 +83,7 @@ end = struct
 
   let push t item =
     let stream = unsafe_eio_stream t in
-    match item with Some item -> Eio.Stream.add stream item | None -> close t
+    Eio.Stream.add stream item
 
   let create capacity =
     let stream = Eio.Stream.create capacity in
@@ -86,10 +93,10 @@ end = struct
       ; closed = Promise.create ()
       }
     in
-    t, push t
+    t
 
   let empty () =
-    let t, _ = create 0 in
+    let t = create 0 in
     close t;
     t
 
@@ -108,12 +115,13 @@ end = struct
     f ()
 
   let of_list xs =
-    let stream, _push = create (List.length xs) in
+    let stream = create (List.length xs) in
     List.iter (Eio.Stream.add (unsafe_eio_stream stream)) xs;
     (* TODO(anmonteiro): should this return a closed stream? *)
     stream
 
-  let take t =
+  let take : type kind. ('a, kind) t -> 'a option =
+   fun t ->
     match t.stream with
     | From f ->
       (match f () with
@@ -121,7 +129,6 @@ end = struct
       | None ->
         close t;
         None)
-    | Push { capacity = 0; _ } -> None
     | Push { stream; _ } ->
       Fiber.first
         (fun () -> Some (Eio.Stream.take stream))
@@ -130,7 +137,8 @@ end = struct
           Promise.await p;
           None)
 
-  let take_nonblocking t =
+  let take_nonblocking : type kind. ('a, kind) t -> 'a option =
+   fun t ->
     match t.stream with
     | From _f -> None
     | Push { stream; _ } -> Eio.Stream.take_nonblocking stream
@@ -139,7 +147,8 @@ end = struct
     from ~f:(fun () ->
         match take t with Some item -> Some (f item) | None -> None)
 
-  let rec iter ~f t =
+  let rec iter : type kind. f:('a -> unit) -> ('a, kind) t -> unit =
+   fun ~f t ->
     match t.stream with
     | Push { capacity = 0; _ } when is_closed t -> ()
     | Push _ | From _ ->
@@ -149,7 +158,10 @@ end = struct
         iter ~f t
       | None -> ())
 
-  let rec iter_p ~sw ~f t =
+  let rec iter_p
+      : type kind. sw:Switch.t -> f:('a -> unit) -> ('a, kind) t -> unit
+    =
+   fun ~sw ~f t ->
     match t.stream with
     | Push { capacity = 0; _ } when is_closed t -> ()
     | Push _ | From _ ->
@@ -184,14 +196,14 @@ type 'a response = ('a, Kafka.error * string) result
 type producer =
   { handler : Kafka.handler
   ; pending_msg : (int, unit Promise.t * unit Promise.u) Hashtbl.t
-  ; stop_poll : unit Promise.u
+  ; stop_poll : unit Promise.t * unit Promise.u
   }
 
 type consumer =
   { handler : Kafka.handler
   ; start_poll : unit Promise.t * unit Promise.u
-  ; stop_poll : unit Promise.u
-  ; subscriptions : (string, Kafka.message Stream.t) Hashtbl.t
+  ; stop_poll : unit Promise.t * unit Promise.u
+  ; subscriptions : (string, (Kafka.message, Stream.push) Stream.t) Hashtbl.t
   }
 
 let next_msg_id =
@@ -246,7 +258,7 @@ let new_producer ~clock ~sw xs =
   | Ok handler ->
     Async.every ~clock ~sw ~stop:stop_poll poll_interval (fun () ->
         ignore (poll' handler));
-    Ok { handler; pending_msg; stop_poll = resolve_stop_poll }
+    Ok { handler; pending_msg; stop_poll = stop_poll, resolve_stop_poll }
   | Error _ as e -> e
 
 external new_consumer'
@@ -265,7 +277,7 @@ let handle_incoming_message subscriptions = function
     let topic_name = Kafka.topic_name topic in
     (match Hashtbl.find_opt subscriptions topic_name with
     | None -> ()
-    | Some writer -> Stream.add writer msg)
+    | Some writer -> Stream.push writer msg)
 
 let new_consumer ~clock ~sw xs =
   let subscriptions = Hashtbl.create (8 * 1024) in
@@ -287,7 +299,7 @@ let new_consumer ~clock ~sw xs =
       { handler
       ; subscriptions
       ; start_poll = start_poll, resolve_start_poll
-      ; stop_poll = resolve_stop_poll
+      ; stop_poll = stop_poll, resolve_stop_poll
       }
   | Error _ as e -> e
 
@@ -297,7 +309,7 @@ external subscribe'
   -> unit response
   = "ocaml_kafka_async_subscribe"
 
-let consume consumer ~topic =
+let consume ~sw ~topic (consumer : consumer) =
   match Hashtbl.mem consumer.subscriptions topic with
   | true -> Error (Kafka.FAIL, "Already subscribed to this topic")
   | false ->
@@ -307,20 +319,26 @@ let consume consumer ~topic =
     let reader =
       let stream = Stream.create 10 in
       Hashtbl.add consumer.subscriptions topic stream;
-      let topics = String.Table.keys consumer.subscriptions in
-      Pipe.create_reader ~close_on_exception:false (fun writer ->
-          match subscribe' consumer.handler ~topics with
-          | Ok () -> Promise.await (fst consumer.stop_poll)
-          | Error e -> subscribe_error := Some e)
+      stream
     in
-    don't_wait_for
-      (let open Deferred.Let_syntax in
-      let%map () = Pipe.closed reader in
-      String.Table.remove consumer.subscriptions topic;
-      let remaining_subs = String.Table.keys consumer.subscriptions in
-      ignore @@ subscribe' consumer.handler ~topics:remaining_subs);
-    (match Pipe.is_closed reader with
-    | false -> return reader
+    Fiber.fork ~sw (fun () ->
+        let topics =
+          Hashtbl.to_seq_keys consumer.subscriptions |> List.of_seq
+        in
+        match subscribe' consumer.handler ~topics with
+        | Ok () ->
+          Promise.await (fst consumer.stop_poll);
+          Stream.close reader
+        | Error e -> subscribe_error := Some e);
+    Fiber.fork ~sw (fun () ->
+        Promise.await (Stream.closed reader);
+        Hashtbl.remove consumer.subscriptions topic;
+        let remaining_subs =
+          Hashtbl.to_seq_keys consumer.subscriptions |> List.of_seq
+        in
+        ignore @@ subscribe' consumer.handler ~topics:remaining_subs);
+    (match Stream.is_closed reader with
+    | false -> Ok reader
     | true ->
       (match !subscribe_error with
       | None -> Error (Kafka.FAIL, "Programmer error, subscribe_error unset")
@@ -332,9 +350,9 @@ let new_topic (producer : producer) name opts =
   | exception Kafka.Error (e, msg) -> Error (e, msg)
 
 let destroy_consumer consumer =
-  Promise.resolve consumer.stop_poll ();
+  Promise.resolve (snd consumer.stop_poll) ();
   Kafka.destroy_handler consumer.handler
 
 let destroy_producer (producer : producer) =
-  Promise.resolve producer.stop_poll ();
+  Promise.resolve (snd producer.stop_poll) ();
   Kafka.destroy_handler producer.handler

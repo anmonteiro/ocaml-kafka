@@ -1,36 +1,46 @@
 (lang dune 2.0)
+
 (name kafka)
+
 (generate_opam_files true)
+
 (maintainers "Didier Wenzek <didier.wenzek@acidalie.com>")
+
 (authors "Didier Wenzek <didier.wenzek@acidalie.com>")
+
 (bug_reports "https://github.com/didier-wenzek/ocaml-kafka/issues")
+
 (homepage "https://github.com/didier-wenzek/ocaml-kafka")
+
 (documentation "https://didier-wenzek.github.io/ocaml-kafka")
+
 (license "MIT")
-(source (github "didier-wenzek/ocaml-kafka"))
+
+(source
+ (github "didier-wenzek/ocaml-kafka"))
 
 (package
-  (name kafka)
-  (depends
-    (ocaml (>= 4.02.3))
-    conf-zlib)
-  (synopsis "OCaml bindings for Kafka")
-  (description "
-Kafka is a high-throughput distributed messaging system.
-"))
+ (name kafka)
+ (depends
+  (ocaml
+   (>= 4.02.3))
+  conf-zlib)
+ (synopsis "OCaml bindings for Kafka")
+ (description "\nKafka is a high-throughput distributed messaging system.\n"))
 
 (package
-  (name kafka_lwt)
-  (depends
-    (ocaml (>= 4.02.3))
-    (kafka (= :version))
-    (cmdliner (>= 1.1.0))
-    lwt
-    conf-zlib)
-  (synopsis "OCaml bindings for Kafka, Lwt bindings")
-  (description "
-Kafka is a high-throughput distributed messaging system.
-"))
+ (name kafka_lwt)
+ (depends
+  (ocaml
+   (>= 4.02.3))
+  (kafka
+   (= :version))
+  (cmdliner
+   (>= 1.1.0))
+  lwt
+  conf-zlib)
+ (synopsis "OCaml bindings for Kafka, Lwt bindings")
+ (description "\nKafka is a high-throughput distributed messaging system.\n"))
 
 (package
   (name kafka_async)
@@ -47,13 +57,12 @@ Kafka is a high-throughput distributed messaging system.
 "))
 
 (package
-  (name kafka_eio)
-  (depends
-    (ocaml (>= 5.0))
-    (kafka (= :version))
-    eio)
-  (synopsis "OCaml bindings for Kafka, Async bindings")
-  (description "
-Kafka is a high-throughput distributed messaging system.
-"))
-
+ (name kafka-eio)
+ (depends
+  (ocaml
+   (>= 5.0))
+  (kafka
+   (= :version))
+  eio)
+ (synopsis "OCaml bindings for Kafka, Async bindings")
+ (description "\nKafka is a high-throughput distributed messaging system.\n"))

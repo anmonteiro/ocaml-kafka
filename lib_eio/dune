@@ -1,6 +1,6 @@
 (library
  (name kafka_eio)
- (public_name kafka_eio)
+ (public_name kafka-eio)
  (libraries kafka eio)
  ; the -I and -L flags are required for freebsd, harmless elsewhere
  (foreign_stubs
