@@ -316,7 +316,6 @@ let produce (t : Producer.t) topic ?partition ?key msg =
   (* Promise.create_resolved e *)
   (* | Ok *)
   | () ->
-    Format.eprintf "done?@.";
     let ret = Promise.await p in
     Promise.create_resolved (Ok ret)
 
@@ -373,3 +372,12 @@ let destroy_consumer (consumer : Consumer.t) =
 let destroy_producer (producer : Producer.t) =
   Promise.resolve (snd producer.stop_poll) ();
   Kafka.destroy_handler producer.handle
+
+(* let wait_delivery ?(timeout_ms = 100) ?(max_outq_len = 0) producer = *)
+(* let timeout_s = (float_of_int timeout_ms) /. 1000.0 in *)
+(* let rec loop () = Lwt.( *)
+(* if Kafka.outq_len producer > max_outq_len *)
+(* then Lwt_unix.sleep timeout_s >>= loop *)
+(* else return_unit *)
+(* ) *)
+(* in loop () *)
