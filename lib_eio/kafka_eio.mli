@@ -36,6 +36,7 @@ module Producer : sig
     -> t response
 
   val handle : t -> Kafka.handler
+  val destroy : t -> unit
 end
 
 module Consumer : sig
@@ -48,6 +49,7 @@ module Consumer : sig
     -> t response
 
   val handle : t -> Kafka.handler
+  val destroy : t -> unit
 end
 
 val produce :
@@ -69,6 +71,3 @@ val consume :
   -> topic:string
   -> Consumer.t
   -> (Kafka.message, Stream.push) Stream.t response
-
-val destroy_consumer : Consumer.t -> unit
-val destroy_producer : Producer.t -> unit

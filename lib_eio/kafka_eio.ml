@@ -16,9 +16,9 @@ module Async = struct
         never
       | Some stop -> stop
     in
-    Fiber.fork ~sw (fun () ->
+    Fiber.fork_promise ~sw (fun () ->
         try
-          while true do
+          while not (Promise.is_resolved stop) do
             match Promise.is_resolved stop with
             | true -> raise Local
             | false ->
@@ -84,6 +84,7 @@ end = struct
       Promise.resolve u ())
 
   let push t item =
+    assert (not (is_closed t));
     let stream = unsafe_eio_stream t in
     Eio.Stream.add stream item
 
@@ -195,8 +196,6 @@ let pending_table () = Hashtbl.create (8 * 1024)
 
 type 'a response = ('a, Kafka.error * string) result
 
-external poll' : Kafka.handler -> int = "ocaml_kafka_eio_poll"
-
 module Producer = struct
   type t =
     { handle : Kafka.handler
@@ -205,6 +204,8 @@ module Producer = struct
     }
 
   let handle t = t.handle
+
+  external poll' : Kafka.handler -> int = "ocaml_kafka_eio_poll"
 
   external new_producer' :
      (Kafka.msg_id -> Kafka.error option -> unit)
@@ -224,10 +225,21 @@ module Producer = struct
     let stop_poll, resolve_stop_poll = Promise.create () in
     match new_producer' (handle_producer_response pending_msg) xs with
     | Ok handle ->
-      Async.every ~clock ~sw ~stop:stop_poll poll_interval (fun () ->
-          ignore (poll' handle));
+      Fiber.fork ~sw (fun () ->
+          match
+            Promise.await
+              (Async.every ~clock ~sw ~stop:stop_poll poll_interval (fun () ->
+                   ignore (poll' handle)))
+          with
+          | Ok () -> ()
+          | Error _ -> assert false);
       Ok { handle; pending_msg; stop_poll = stop_poll, resolve_stop_poll }
     | Error _ as e -> e
+
+  let destroy t =
+    let _, resolve_stop_poll = t.stop_poll in
+    Promise.resolve resolve_stop_poll ();
+    Kafka.destroy_handler t.handle
 end
 
 module Consumer = struct
@@ -245,7 +257,7 @@ module Consumer = struct
     -> Kafka.handler response
     = "ocaml_kafka_eio_new_consumer"
 
-  external consumer_poll' :
+  external poll' :
      Kafka.handler
     -> Kafka.message option response
     = "ocaml_kafka_eio_consumer_poll"
@@ -265,16 +277,22 @@ module Consumer = struct
     match new_consumer' xs with
     | Ok handle ->
       Fiber.fork ~sw (fun () ->
-          Async.every
-            ~clock
-            ~sw
-            ~start:start_poll
-            ~stop:stop_poll
-            poll_interval
-            (fun () ->
-              match consumer_poll' handle with
-              | Error _ -> traceln "Issue with polling"
-              | Ok success -> handle_incoming_message subscriptions success));
+          match
+            Promise.await
+            @@ Async.every
+                 ~clock
+                 ~sw
+                 ~start:start_poll
+                 ~stop:stop_poll
+                 poll_interval
+                 (fun () ->
+                   match poll' handle with
+                   | Error _ -> traceln "Issue with polling"
+                   | Ok maybe_message ->
+                     handle_incoming_message subscriptions maybe_message)
+          with
+          | Ok () -> ()
+          | Error _ -> assert false);
       Ok
         { handle
         ; subscriptions
@@ -282,6 +300,11 @@ module Consumer = struct
         ; stop_poll = stop_poll, resolve_stop_poll
         }
     | Error _ as e -> e
+
+  let destroy t =
+    let _, resolve_stop_poll = t.stop_poll in
+    Promise.resolve resolve_stop_poll ();
+    Kafka.destroy_handler t.handle
 end
 
 let next_msg_id =
@@ -309,15 +332,9 @@ let produce (t : Producer.t) topic ?partition ?key msg =
   let msg_id = next_msg_id () in
   let p, u = Promise.create () in
   Hashtbl.replace t.pending_msg msg_id (p, u);
-  match produce' topic ?partition ?key ~msg_id msg with
-  (* | Error _ as e -> *)
-  (* Format.eprintf "donerr?@."; *)
-  (* Hashtbl.remove t.pending_msg msg_id; *)
-  (* Promise.create_resolved e *)
-  (* | Ok *)
-  | () ->
-    let ret = Promise.await p in
-    Promise.create_resolved (Ok ret)
+  produce' topic ?partition ?key ~msg_id msg;
+  let ret = Promise.await p in
+  Promise.create_resolved (Ok ret)
 
 external subscribe' :
    Kafka.handler
@@ -329,8 +346,8 @@ let consume ~sw ~topic (consumer : Consumer.t) =
   match Hashtbl.mem consumer.subscriptions topic with
   | true -> Error (Kafka.FAIL, "Already subscribed to this topic")
   | false ->
-    if not (Promise.is_resolved (fst consumer.start_poll))
-    then Promise.resolve (snd consumer.start_poll) ();
+    assert (not (Promise.is_resolved (fst consumer.start_poll)));
+    Promise.resolve (snd consumer.start_poll) ();
     let subscribe_error = ref None in
     let reader =
       let stream = Stream.create 10 in
@@ -352,7 +369,7 @@ let consume ~sw ~topic (consumer : Consumer.t) =
         let remaining_subs =
           Hashtbl.to_seq_keys consumer.subscriptions |> List.of_seq
         in
-        ignore @@ subscribe' consumer.handle ~topics:remaining_subs);
+        subscribe' consumer.handle ~topics:remaining_subs |> Result.get_ok);
     (match Stream.is_closed reader with
     | false -> Ok reader
     | true ->
@@ -364,14 +381,6 @@ let new_topic (producer : Producer.t) name opts =
   match Kafka.new_topic producer.handle name opts with
   | v -> Ok v
   | exception Kafka.Error (e, msg) -> Error (e, msg)
-
-let destroy_consumer (consumer : Consumer.t) =
-  Promise.resolve (snd consumer.stop_poll) ();
-  Kafka.destroy_handler consumer.handle
-
-let destroy_producer (producer : Producer.t) =
-  Promise.resolve (snd producer.stop_poll) ();
-  Kafka.destroy_handler producer.handle
 
 (* let wait_delivery ?(timeout_ms = 100) ?(max_outq_len = 0) producer = *)
 (* let timeout_s = (float_of_int timeout_ms) /. 1000.0 in *)
