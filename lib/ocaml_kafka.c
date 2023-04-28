@@ -563,7 +563,7 @@ value ocaml_kafka_produce(value caml_kafka_topic, value caml_kafka_partition, va
 
   long msg_id = Long_val(caml_msgid);
 
-  int err = rd_kafka_produce(topic, partition, RD_KAFKA_MSG_F_COPY,
+  int err = rd_kafka_produce(topic, partition, 0,
                              (void *)String_val(caml_msg),
                              caml_string_length(caml_msg),
                              key, key_len, (void *)msg_id);
