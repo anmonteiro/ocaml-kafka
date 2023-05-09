@@ -32,6 +32,7 @@ module Producer : sig
   val create :
      clock:Eio.Time.clock
     -> sw:Switch.t
+    -> ?poll_interval:float
     -> (string * string) list
     -> t response
 
@@ -47,6 +48,7 @@ module Consumer : sig
     -> sw:Switch.t
     -> ?rebalance_callback:
          (op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
+    -> ?poll_interval:float
     -> (string * string) list
     -> t response
 
@@ -64,6 +66,7 @@ val produce :
 
 val new_topic :
    Producer.t
+  -> ?partitioner_callback:(int -> string -> int option)
   -> string
   -> (string * string) list
   -> Kafka.topic response

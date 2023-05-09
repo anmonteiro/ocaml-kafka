@@ -1,6 +1,6 @@
 open Eio.Std
 
-let poll_interval = 0.050
+let default_poll_interval = 0.050
 
 module Async = struct
   exception Local
@@ -220,7 +220,7 @@ module Producer = struct
       Promise.resolve u ()
     | None -> ()
 
-  let create ~clock ~sw xs =
+  let create ~clock ~sw ?(poll_interval = default_poll_interval) xs =
     let pending_msg = pending_table () in
     let stop_poll, resolve_stop_poll = Promise.create () in
     match new_producer' (handle_producer_response pending_msg) xs with
@@ -270,7 +270,13 @@ module Consumer = struct
       | None -> ()
       | Some writer -> Stream.push writer msg)
 
-  let create ~clock ~sw ?rebalance_callback xs =
+  let create
+      ~clock
+      ~sw
+      ?rebalance_callback
+      ?(poll_interval = default_poll_interval)
+      xs
+    =
     let subscriptions = Hashtbl.create (8 * 1024) in
     let stop_poll, resolve_stop_poll = Promise.create () in
     let start_poll, resolve_start_poll = Promise.create () in
@@ -313,20 +319,11 @@ let next_msg_id =
     n := id + 1;
     id
 
-external produce' :
-   Kafka.topic
-  -> ?partition:Kafka.partition
-  -> ?key:string
-  -> msg_id:Kafka.msg_id
-  -> string
-  -> unit
-  = "ocaml_kafka_produce"
-
 let produce (t : Producer.t) topic ?partition ?key msg =
   let msg_id = next_msg_id () in
   let p, u = Promise.create () in
   Hashtbl.replace t.pending_msg msg_id (p, u);
-  produce' topic ?partition ?key ~msg_id msg;
+  Kafka.produce topic ?partition ?key ~msg_id msg;
   let ret = Promise.await p in
   Promise.create_resolved (Ok ret)
 
@@ -370,7 +367,7 @@ let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
       | None -> Error (Kafka.FAIL, "Programmer error, subscribe_error unset")
       | Some e -> Error e))
 
-let new_topic (producer : Producer.t) name opts =
-  match Kafka.new_topic producer.handle name opts with
+let new_topic (producer : Producer.t) ?partitioner_callback name opts =
+  match Kafka.new_topic ?partitioner_callback producer.handle name opts with
   | v -> Ok v
   | exception Kafka.Error (e, msg) -> Error (e, msg)
