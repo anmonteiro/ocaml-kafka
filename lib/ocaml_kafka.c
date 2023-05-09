@@ -107,7 +107,7 @@ value alloc_caml_handler(void* hdl)
   CAMLreturn(caml_handler);
 }
 
-inline static void free_caml_handler(value caml_handler)
+inline void free_caml_handler(value caml_handler)
 {
   handler_val(caml_handler) = NULL;
 }
@@ -955,4 +955,19 @@ value ocaml_kafka_offset_store(value caml_kafka_topic, value caml_partition, val
   }
 
   CAMLreturn(Val_unit);
+}
+
+extern CAMLprim
+value ocaml_kafka_set_offset(value caml_partitions, value caml_kafka_topic, value caml_offset)
+{
+    CAMLparam3(caml_partitions, caml_kafka_topic, caml_offset);
+    rd_kafka_topic_partition_list_t *partitions = get_handler(caml_partitions);
+    const char* topic = String_val(caml_kafka_topic);
+    int64_t offset = Int64_val(caml_offset);
+
+    for (int i = 0; i < partitions->size; i++) {
+      rd_kafka_topic_partition_list_set_offset(partitions, topic, i, offset);
+    }
+
+    CAMLreturn (Val_unit);
 }

@@ -170,3 +170,24 @@ let librdkafka_version = get_librdkafka_version ()
 
 external offset_store : topic -> partition -> offset -> unit
   = "ocaml_kafka_offset_store"
+
+type partition_list
+
+external set_consumer_offset
+  : partition_list
+  -> topic:string
+  -> offset
+  -> unit = "ocaml_kafka_set_offset"
+
+module Rebalance = struct
+  type op =
+    | Assign
+    | Unassign
+    | Unspecified of error
+
+  let to_string = function
+    | Assign -> "Assign"
+    | Unassign -> "Unassign"
+    | Unspecified error ->
+      Format.sprintf "Unspecified(%d)" (Obj.magic error : int)
+end

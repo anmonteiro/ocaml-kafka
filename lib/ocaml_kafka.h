@@ -8,9 +8,11 @@
 #define handler_val(v) *((void **) &Field(v, 0))
 
 value caml_error_value(rd_kafka_resp_err_t);
-rd_kafka_conf_res_t configure_handler(rd_kafka_conf_t *, value, char*, size_t);
-void ocaml_kafka_delivery_callback(rd_kafka_t*, void*, size_t, rd_kafka_resp_err_t, void*, void*);
-value alloc_caml_handler(void*);
+rd_kafka_conf_res_t configure_handler(rd_kafka_conf_t *, value, char *, size_t);
+void ocaml_kafka_delivery_callback(rd_kafka_t *, void *, size_t,
+                                   rd_kafka_resp_err_t, void *, void *);
+value alloc_caml_handler(void *);
+void free_caml_handler(value);
 
 typedef struct {
   value caml_callback;

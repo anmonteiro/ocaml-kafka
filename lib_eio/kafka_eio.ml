@@ -231,15 +231,14 @@ module Producer = struct
               (Async.every ~clock ~sw ~stop:stop_poll poll_interval (fun () ->
                    ignore (poll' handle)))
           with
-          | Ok () -> ()
+          | Ok () -> Kafka.destroy_handler handle
           | Error _ -> assert false);
       Ok { handle; pending_msg; stop_poll = stop_poll, resolve_stop_poll }
     | Error _ as e -> e
 
   let destroy t =
     let _, resolve_stop_poll = t.stop_poll in
-    Promise.resolve resolve_stop_poll ();
-    Kafka.destroy_handler t.handle
+    Promise.resolve resolve_stop_poll ()
 end
 
 module Consumer = struct
@@ -253,7 +252,8 @@ module Consumer = struct
   let handle t = t.handle
 
   external new_consumer' :
-     (string * string) list
+     ?rebalance_callback:(op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
+    -> (string * string) list
     -> Kafka.handler response
     = "ocaml_kafka_eio_new_consumer"
 
@@ -270,11 +270,11 @@ module Consumer = struct
       | None -> ()
       | Some writer -> Stream.push writer msg)
 
-  let create ~clock ~sw xs =
+  let create ~clock ~sw ?rebalance_callback xs =
     let subscriptions = Hashtbl.create (8 * 1024) in
     let stop_poll, resolve_stop_poll = Promise.create () in
     let start_poll, resolve_start_poll = Promise.create () in
-    match new_consumer' xs with
+    match new_consumer' ?rebalance_callback xs with
     | Ok handle ->
       Fiber.fork ~sw (fun () ->
           match
@@ -303,8 +303,7 @@ module Consumer = struct
 
   let destroy t =
     let _, resolve_stop_poll = t.stop_poll in
-    Promise.resolve resolve_stop_poll ();
-    Kafka.destroy_handler t.handle
+    Promise.resolve resolve_stop_poll ()
 end
 
 let next_msg_id =
@@ -314,18 +313,13 @@ let next_msg_id =
     n := id + 1;
     id
 
-(* external produce_idmsg: topic -> ?partition:int -> ?key:string -> msg_id ->
-   string -> unit = "ocaml_kafka_produce" *)
-(* let produce topic ?partition ?key ?(msg_id = 0) msg = produce_idmsg topic
-   ?partition ?key msg_id msg *)
-
 external produce' :
    Kafka.topic
   -> ?partition:Kafka.partition
   -> ?key:string
   -> msg_id:Kafka.msg_id
   -> string
-  -> unit (* response *)
+  -> unit
   = "ocaml_kafka_produce"
 
 let produce (t : Producer.t) topic ?partition ?key msg =
@@ -342,7 +336,7 @@ external subscribe' :
   -> unit response
   = "ocaml_kafka_eio_subscribe"
 
-let consume ~sw ~topic (consumer : Consumer.t) =
+let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
   match Hashtbl.mem consumer.subscriptions topic with
   | true -> Error (Kafka.FAIL, "Already subscribed to this topic")
   | false ->
@@ -350,7 +344,7 @@ let consume ~sw ~topic (consumer : Consumer.t) =
     Promise.resolve (snd consumer.start_poll) ();
     let subscribe_error = ref None in
     let reader =
-      let stream = Stream.create 10 in
+      let stream = Stream.create capacity in
       Hashtbl.add consumer.subscriptions topic stream;
       stream
     in
@@ -361,15 +355,14 @@ let consume ~sw ~topic (consumer : Consumer.t) =
         match subscribe' consumer.handle ~topics with
         | Ok () ->
           Promise.await (fst consumer.stop_poll);
-          Stream.close reader
+          Hashtbl.remove consumer.subscriptions topic;
+          let remaining_subs =
+            Hashtbl.to_seq_keys consumer.subscriptions |> List.of_seq
+          in
+          subscribe' consumer.handle ~topics:remaining_subs |> Result.get_ok;
+          Stream.close reader;
+          Kafka.destroy_handler consumer.handle
         | Error e -> subscribe_error := Some e);
-    Fiber.fork ~sw (fun () ->
-        Promise.await (Stream.closed reader);
-        Hashtbl.remove consumer.subscriptions topic;
-        let remaining_subs =
-          Hashtbl.to_seq_keys consumer.subscriptions |> List.of_seq
-        in
-        subscribe' consumer.handle ~topics:remaining_subs |> Result.get_ok);
     (match Stream.is_closed reader with
     | false -> Ok reader
     | true ->
@@ -381,12 +374,3 @@ let new_topic (producer : Producer.t) name opts =
   match Kafka.new_topic producer.handle name opts with
   | v -> Ok v
   | exception Kafka.Error (e, msg) -> Error (e, msg)
-
-(* let wait_delivery ?(timeout_ms = 100) ?(max_outq_len = 0) producer = *)
-(* let timeout_s = (float_of_int timeout_ms) /. 1000.0 in *)
-(* let rec loop () = Lwt.( *)
-(* if Kafka.outq_len producer > max_outq_len *)
-(* then Lwt_unix.sleep timeout_s >>= loop *)
-(* else return_unit *)
-(* ) *)
-(* in loop () *)

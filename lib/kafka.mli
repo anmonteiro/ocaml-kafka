@@ -190,7 +190,7 @@ val consume_start : topic -> partition -> offset -> unit
   or one of the the special offsets:
   [Kafka.offset_beginning], [Kafka.offset_end], [Kafka.offset_stored]
   of [Kafka.offset_tail n] (i.e. [n] messages before [Kafka.offset_end]).
-  
+
   The system (librdkafka) will attempt to keep 'queued.min.messages' (consumer config property)
   messages in the local queue by repeatedly fetching batches of messages
   from the broker until the threshold is reached.
@@ -212,7 +212,7 @@ val consume_stop : topic -> partition -> unit
 val consume : ?timeout_ms:int -> topic -> partition -> message
 (** [consume ~timeout_ms topic partition]
    consumes a single message from topic [topic] and [partition].
-   
+
    Waits at most [timeout_ms] milli-seconds for a message to be received.
    The default timout is 1 second.
 
@@ -298,3 +298,20 @@ val all_topics_metadata :
 
 (* Store the consumer offset of a particular partition to a specific offset *)
 val offset_store : topic -> partition -> offset -> unit
+
+type partition_list
+
+external set_consumer_offset
+  : partition_list
+  -> topic:string
+  -> offset
+  -> unit = "ocaml_kafka_set_offset"
+
+module Rebalance : sig
+  type op =
+    | Assign
+    | Unassign
+    | Unspecified of error
+
+  val to_string: op -> string
+end

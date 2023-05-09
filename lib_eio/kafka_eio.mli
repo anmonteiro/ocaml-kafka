@@ -45,6 +45,8 @@ module Consumer : sig
   val create :
      clock:Eio.Time.clock
     -> sw:Switch.t
+    -> ?rebalance_callback:
+         (op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
     -> (string * string) list
     -> t response
 
@@ -69,5 +71,6 @@ val new_topic :
 val consume :
    sw:Switch.t
   -> topic:string
+  -> ?capacity:int
   -> Consumer.t
   -> (Kafka.message, Stream.push) Stream.t response

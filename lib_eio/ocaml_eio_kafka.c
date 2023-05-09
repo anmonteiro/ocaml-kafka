@@ -81,9 +81,52 @@ CAMLprim value ocaml_kafka_eio_new_producer(value caml_delivery_callback,
   CAMLreturn(result);
 }
 
-CAMLprim value ocaml_kafka_eio_new_consumer(value caml_consumer_options) {
-  CAMLparam1(caml_consumer_options);
-  CAMLlocal1(result);
+static void
+ocaml_kafka_eio_rebalance_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                             rd_kafka_topic_partition_list_t *partitions,
+                             void *opaque) {
+  CAMLparam0();
+  CAMLlocal3(caml_cb, caml_partitions, caml_rebalance_op);
+
+  caml_cb = ((ocaml_kafka_opaque *)opaque)->caml_callback;
+
+  caml_partitions = alloc_caml_handler(partitions);
+  // do the default thing, but also call our OCaml code
+  switch (err) {
+  case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+    caml_callback2(caml_cb, Val_int(0), caml_partitions);
+    rd_kafka_assign(rk, partitions);
+    break;
+
+  case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+    /* XXX(anmonteiro): we don't currently invoke the callback for revocations,
+     * because the OCaml bindings destroy the kafka opaque value before calling
+     * rd_kafka_destroy (which then triggers the rebalance callback). */
+    /* caml_callback2(caml_cb, Val_int(1), caml_partitions); */
+    rd_kafka_commit(rk, partitions, 0);
+    rd_kafka_assign(rk, NULL);
+    break;
+
+  default:
+    /* In this latter case (arbitrary error), the application must call
+     * rd_kafka_assign(rk, NULL) to synchronize state. */
+    rd_kafka_assign(rk, NULL);
+
+    caml_rebalance_op = caml_alloc(1, 0);
+    Store_field(caml_rebalance_op, 0, caml_error_value(err));
+
+    caml_callback2(caml_cb, caml_rebalance_op, caml_partitions);
+    break;
+  }
+  free_caml_handler(caml_partitions);
+
+  CAMLreturn0;
+}
+
+CAMLprim value ocaml_kafka_eio_new_consumer(value caml_rebalance_callback,
+                                            value caml_consumer_options) {
+  CAMLparam2(caml_rebalance_callback, caml_consumer_options);
+  CAMLlocal2(caml_callback, result);
 
   char error_msg[160];
   rd_kafka_conf_t *conf = rd_kafka_conf_new();
@@ -96,9 +139,18 @@ CAMLprim value ocaml_kafka_eio_new_consumer(value caml_consumer_options) {
     CAMLreturn(result);
   }
 
+  ocaml_kafka_opaque *opaque = NULL;
+  if (Is_block(caml_rebalance_callback)) {
+    caml_callback = Field(caml_rebalance_callback, 0);
+    opaque = ocaml_kafka_opaque_create(caml_callback);
+    rd_kafka_conf_set_opaque(conf, (void *)opaque);
+    rd_kafka_conf_set_rebalance_cb(conf, ocaml_kafka_eio_rebalance_cb);
+  }
+
   rd_kafka_t *handler =
       rd_kafka_new(RD_KAFKA_CONSUMER, conf, error_msg, sizeof(error_msg));
   if (handler == NULL) {
+    ocaml_kafka_opaque_destroy(opaque);
     rd_kafka_conf_destroy(conf);
     result = ERROR(RD_KAFKA_RESP_ERR__FAIL,
                    "Failed to create new kafka consumer (%s)", error_msg);
