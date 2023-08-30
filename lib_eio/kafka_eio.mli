@@ -30,7 +30,7 @@ module Producer : sig
   type t
 
   val create :
-     clock:Eio.Time.clock
+     clock:_ Eio.Time.clock
     -> sw:Switch.t
     -> ?poll_interval:float
     -> (string * string) list
@@ -44,7 +44,7 @@ module Consumer : sig
   type t
 
   val create :
-     clock:Eio.Time.clock
+     clock:_ Eio.Time.clock
     -> sw:Switch.t
     -> ?rebalance_callback:
          (op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
