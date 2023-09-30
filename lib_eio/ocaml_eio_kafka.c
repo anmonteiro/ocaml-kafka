@@ -216,7 +216,7 @@ CAMLprim value ocaml_kafka_eio_extract_message(rd_kafka_message_t *message) {
   CAMLparam0();
   CAMLlocal5(caml_msg, caml_msg_payload, caml_msg_offset, caml_key,
              caml_key_payload);
-  CAMLlocal2(result, caml_kafka_topic);
+  CAMLlocal3(result, caml_kafka_topic, caml_msg_timestamp);
 
   rd_kafka_topic_t *topic = message->rkt;
 
@@ -237,12 +237,17 @@ CAMLprim value ocaml_kafka_eio_extract_message(rd_kafka_message_t *message) {
       caml_key = Val_int(0); // None
     }
 
-    caml_msg = caml_alloc_small(5, 0);
+    rd_kafka_timestamp_type_t tstype;
+    int64_t msg_timestamp = rd_kafka_message_timestamp(message, &tstype);
+    caml_msg_timestamp = caml_copy_int64(msg_timestamp);
+
+    caml_msg = caml_alloc_small(6, 0);
     Field(caml_msg, 0) = caml_kafka_topic;
     Field(caml_msg, 1) = Val_int(message->partition);
     Field(caml_msg, 2) = caml_msg_offset;
-    Field(caml_msg, 3) = caml_msg_payload;
-    Field(caml_msg, 4) = caml_key;
+    Field(caml_msg, 3) = caml_msg_timestamp;
+    Field(caml_msg, 4) = caml_msg_payload;
+    Field(caml_msg, 5) = caml_key;
     result = caml_msg;
   } else {
     caml_msg_offset = caml_copy_int64(message->offset);

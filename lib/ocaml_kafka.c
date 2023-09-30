@@ -414,6 +414,7 @@ value ocaml_kafka_extract_topic_message(value caml_kafka_topic, rd_kafka_message
 {
   CAMLparam1(caml_kafka_topic);
   CAMLlocal5(caml_msg, caml_msg_payload, caml_msg_offset, caml_key, caml_key_payload);
+  CAMLlocal1(caml_msg_timestamp);
 
   if (!message->err) {
     caml_msg_payload = caml_alloc_initialized_string(message->len, message->payload);
@@ -428,12 +429,17 @@ value ocaml_kafka_extract_topic_message(value caml_kafka_topic, rd_kafka_message
       caml_key = Val_int(0); // None
     }
 
-    caml_msg = caml_alloc_small(5, 0);
+    rd_kafka_timestamp_type_t tstype;
+    int64_t msg_timestamp = rd_kafka_message_timestamp(message, &tstype);
+    caml_msg_timestamp = caml_copy_int64(msg_timestamp);
+
+    caml_msg = caml_alloc_small(6, 0);
     Field( caml_msg, 0) = caml_kafka_topic;
     Field( caml_msg, 1) = Val_int(message->partition);
     Field( caml_msg, 2) = caml_msg_offset;
-    Field( caml_msg, 3) = caml_msg_payload;
-    Field( caml_msg, 4) = caml_key;
+    Field( caml_msg, 3) = caml_msg_timestamp;
+    Field( caml_msg, 4) = caml_msg_payload;
+    Field( caml_msg, 5) = caml_key;
   }
   else if (message->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
     caml_msg_offset = caml_copy_int64(message->offset) ;

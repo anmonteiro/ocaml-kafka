@@ -22,12 +22,18 @@ type offset = int64
 (** A message consumed from a consumer or a queue. *)
 type message =
   | Message of
-      topic
-      * partition
-      * offset
-      * string
-      * string option (* topic, partition, offset, payload, optional key *)
-  | PartitionEnd of topic * partition * offset (* topic, partition, offset *)
+      { topic : topic
+      ; partition : partition
+      ; offset : offset
+      ; timestamp : int64
+      ; payload : string
+      ; key : string option
+      }
+  | PartitionEnd of
+      { topic : topic
+      ; partition : partition
+      ; offset : offset
+      }
 
 type msg_id = int
 (** Message identifier used by producers for delivery callbacks.*)
