@@ -63,7 +63,7 @@ external consumer_poll' : Kafka.handler -> Kafka.message option response
 
 let handle_incoming_message subscriptions = function
   | None | Some (Kafka.PartitionEnd _) -> ()
-  | Some (Kafka.Message (topic, _, _, _, _) as msg) -> (
+  | Some (Kafka.Message {topic;  _} as msg) -> (
       let topic_name = Kafka.topic_name topic in
       match Hashtbl.find subscriptions topic_name with
       | None -> ()

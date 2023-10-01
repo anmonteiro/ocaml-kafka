@@ -85,8 +85,8 @@ let main =
   (* Consume messages *)
   let rec consume t p =
     match Kafka.consume ~timeout_ms t p with
-    | Kafka.Message (_, _, _, msg, _) -> msg
-    | Kafka.PartitionEnd (_, _, _) ->
+    | Kafka.Message { payload = msg; _ } -> msg
+    | Kafka.PartitionEnd _ ->
         (* Printf.fprintf stderr "No message for now\n%!"; *)
         consume t p
     | exception Kafka.Error (Kafka.TIMED_OUT, _) ->
@@ -101,7 +101,7 @@ let main =
   assert (msg = "message 2");
 
   (match Kafka.consume ~timeout_ms consumer_topic partition with
-  | Kafka.PartitionEnd (t, p, _) ->
+  | Kafka.PartitionEnd { topic = t; partition = p; _} ->
       assert (Kafka.topic_name t = "test");
       assert (p = partition)
   | exception Kafka.Error (Kafka.TIMED_OUT, _) ->
@@ -122,7 +122,7 @@ let main =
   assert (
     List.fold_left
       (fun acc -> function
-        | Kafka.Message (_, _, _, msg, _) -> acc @ [ msg ]
+        | Kafka.Message { payload = msg; _ } -> acc @ [ msg ]
         | _ -> acc)
       [] messages
     = [ "message 0 bis"; "message 1 bis"; "message 2 bis" ]);
@@ -143,11 +143,11 @@ let main =
 
   let rec consume_queue (n, m) =
     match Kafka.consume_queue ~timeout_ms queue with
-    | Kafka.Message (topic, partition, _, _, _) ->
+    | Kafka.Message {topic; partition;  _} ->
         assert (topic == consumer_topic);
         assert (partition = 0 || partition = 1);
         if partition = 0 then (n + 1, m) else (n, m + 1)
-    | Kafka.PartitionEnd (_, _, _) ->
+    | Kafka.PartitionEnd _ ->
         (* Printf.fprintf stderr "No queued message for now\n%!"; *)
         consume_queue (n, m)
     | exception Kafka.Error (Kafka.TIMED_OUT, _) ->
@@ -171,10 +171,10 @@ let main =
     List.sort compare
       (List.fold_left
          (fun acc -> function
-           | Kafka.Message (_, _, _, msg, _) ->
+           | Kafka.Message { payload = msg; _ } ->
                Format.printf "Consume_batch_queue received: %s\n%!" msg;
                acc @ [ msg ]
-           | Kafka.PartitionEnd (_, partition, _) ->
+           | Kafka.PartitionEnd { partition; _ } ->
                Format.printf "Consume_batch_queue eof: %d\n%!" partition;
                acc)
          [] messages)
@@ -202,10 +202,10 @@ let main =
   (* Consume the keyed messages, checking they have been received on the right partition *)
   let rec consume_k t =
     match Kafka.consume_queue t with
-    | Kafka.Message (_, _partition, _, msg, Some key) ->
+    | Kafka.Message { payload = msg; key = Some key; _ } ->
         (* assert (partition = (partitioner_callback 2 key |> Option.get)); -- issue #26 *)
         (key, msg)
-    | Kafka.Message (_, _, _, _, None) | Kafka.PartitionEnd (_, _, _) ->
+    | Kafka.Message { key = None; _ } | Kafka.PartitionEnd _ ->
         consume_k t
     | exception Kafka.Error (Kafka.TIMED_OUT, _) ->
         Printf.fprintf stderr "Timeout after: %d ms\n%!" timeout_ms;
@@ -269,7 +269,7 @@ let main =
   let messages =
     src
       (fun acc -> function
-        | Kafka.Message (_, _, _, msg, _) -> msg :: acc
+        | Kafka.Message { payload = msg; _ } -> msg :: acc
         | _ -> acc)
       offsets []
   in

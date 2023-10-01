@@ -24,7 +24,7 @@ let cache c (k, v) = Cache.add k v c
 let consume brokers topic_name messages =
   let expected_messages = messages |> List.fold_left cache Cache.empty |> ref in
   let remove_received = function
-    | Kafka.Message (_, _, _, _, Some key) when Cache.mem key !expected_messages
+    | Kafka.Message { key= Some key; _ } when Cache.mem key !expected_messages
       ->
         expected_messages := Cache.remove key !expected_messages;
         return () (* Lwt_io.printf "Received as expected: %s\n%!" key *)

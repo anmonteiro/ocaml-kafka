@@ -47,7 +47,7 @@ let main_result host port topic =
     Deferred.ok
     @@ Pipe.fold reader ~init:(String.Set.of_list messages) ~f:(fun awaiting ->
          function
-         | Message (topic, _, _, payload, _) ->
+         | Message {topic; payload; _} ->
              let topic_name = Kafka.topic_name topic in
              Log.Global.debug "Message on topic '%s', payload '%s'" topic_name
                payload;

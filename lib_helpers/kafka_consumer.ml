@@ -60,10 +60,10 @@ module PartitionSet : Set.S with type elt = int = Set.Make (Partition)
 let fold_queue_upto_end queue timeout_ms update partitions seed =
   let rec loop (partition_set, acc) =
     match Kafka.consume_queue ~timeout_ms queue with
-    | Kafka.Message (_, partition, _, _, _) as msg ->
+    | Kafka.Message { partition; _ } as msg ->
         let partition_set = PartitionSet.add partition partition_set in
         loop (partition_set, update acc msg)
-    | Kafka.PartitionEnd (_, partition, _) as msg ->
+    | Kafka.PartitionEnd { partition; _ } as msg ->
         let partition_set = PartitionSet.remove partition partition_set in
         let acc = update acc msg in
         if PartitionSet.is_empty partition_set then acc

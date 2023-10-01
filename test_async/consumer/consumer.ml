@@ -22,7 +22,7 @@ let main (brokers, topics, group_id) =
   let%bind () =
     Deferred.ok
     @@ Pipe.iter reader ~f:(function
-         | Message (topic, _, _, payload, _) ->
+         | Message {topic; payload; _} ->
              let topic_name = Kafka.topic_name topic in
              Deferred.return
              @@ Log.Global.info "Message on topic '%s', payload '%s'" topic_name

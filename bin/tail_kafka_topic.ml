@@ -20,13 +20,13 @@ let info =
   Cmd.info "tail_kafka_topic" ~doc ~man
 
 let print_msg = function
-  | Kafka.Message (topic, partition, offset, msg, None) ->
+  | Kafka.Message {topic; partition; offset; payload=msg; key= None;_} ->
       Lwt_io.printf "%s,%d,%Ld::%s\n%!" (Kafka.topic_name topic) partition
         offset msg
-  | Kafka.Message (topic, partition, offset, msg, Some key) ->
+  | Kafka.Message {topic; partition; offset; payload = msg; key = Some key;_} ->
       Lwt_io.printf "%s,%d,%Ld:%s:%s\n%!" (Kafka.topic_name topic) partition
         offset key msg
-  | Kafka.PartitionEnd (topic, partition, offset) ->
+  | Kafka.PartitionEnd {topic; partition; offset} ->
       Lwt_io.printf "%s,%d,%Ld (EOP)\n%!" (Kafka.topic_name topic) partition
         offset
 
