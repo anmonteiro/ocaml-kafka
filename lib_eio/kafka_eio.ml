@@ -199,7 +199,7 @@ type 'a response = ('a, Kafka.error * string) result
 module Producer = struct
   type t =
     { handle : Kafka.handler
-    ; pending_msg : (int, unit Promise.t * unit Promise.u) Hashtbl.t
+    ; pending_msg : (int, (unit, Kafka.error * string) result Promise.t * (unit, Kafka.error * string) result Promise.u) Hashtbl.t
     ; stop_poll : unit Promise.t * unit Promise.u
     }
 
@@ -208,22 +208,26 @@ module Producer = struct
   external poll' : Kafka.handler -> int = "ocaml_kafka_eio_poll"
 
   external new_producer' :
-     (Kafka.msg_id -> Kafka.error option -> unit)
+     delivery_cb:(Kafka.msg_id -> Kafka.error option -> unit)
     -> (string * string) list
     -> Kafka.handler response
     = "ocaml_kafka_eio_new_producer"
 
-  let handle_producer_response pending_msg msg_id _maybe_error =
-    match Hashtbl.find_opt pending_msg msg_id with
-    | Some (_, u) ->
-      Hashtbl.remove pending_msg msg_id;
-      Promise.resolve u ()
-    | None -> ()
+let delivery_callback pending_msg_tbl msg_id error =
+  match Hashtbl.find pending_msg_tbl msg_id with
+  | (_, u) ->
+    Hashtbl.remove pending_msg_tbl msg_id;
+    (match error with
+    | None ->
+      Promise.resolve_ok u ()
+    | Some error ->
+      Promise.resolve_error u (error, "Failed to produce message"))
+  | exception Not_found -> ()
 
   let create ~clock ~sw ?(poll_interval = default_poll_interval) xs =
     let pending_msg = pending_table () in
     let stop_poll, resolve_stop_poll = Promise.create () in
-    match new_producer' (handle_producer_response pending_msg) xs with
+    match new_producer' ~delivery_cb:(delivery_callback pending_msg) xs with
     | Ok handle ->
       Fiber.fork ~sw (fun () ->
           match
@@ -313,19 +317,15 @@ module Consumer = struct
 end
 
 let next_msg_id =
-  let n = ref 1 in
-  fun () ->
-    let id = !n in
-    n := id + 1;
-    id
+  let n = Atomic.make 1 in
+  fun () -> Atomic.fetch_and_add n 1
 
 let produce (t : Producer.t) topic ?partition ?key msg =
   let msg_id = next_msg_id () in
   let p, u = Promise.create () in
   Hashtbl.replace t.pending_msg msg_id (p, u);
   Kafka.produce topic ?partition ?key ~msg_id msg;
-  let ret = Promise.await p in
-  Promise.create_resolved (Ok ret)
+  p
 
 external subscribe' :
    Kafka.handler
