@@ -32,7 +32,7 @@ let fold_partition
     | Kafka.PartitionEnd _ as msg ->
         let acc = update acc msg in
         if stop_at_end then acc else loop acc
-    | exception Kafka.Error (Kafka.TIMED_OUT, _) ->
+    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) ->
         if stop_at_end then acc else loop acc
     | exception e -> raise e
   in
@@ -44,7 +44,7 @@ let fold_queue_for_ever queue timeout_ms update seed =
     match Kafka.consume_queue ~timeout_ms queue with
     | Kafka.Message _ as msg -> loop (update acc msg)
     | Kafka.PartitionEnd _ as msg -> loop (update acc msg)
-    | exception Kafka.Error (Kafka.TIMED_OUT, _) -> loop acc
+    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) -> loop acc
     | exception e -> raise e
   in
   loop seed
@@ -68,7 +68,7 @@ let fold_queue_upto_end queue timeout_ms update partitions seed =
         let acc = update acc msg in
         if PartitionSet.is_empty partition_set then acc
         else loop (partition_set, acc)
-    | exception Kafka.Error (Kafka.TIMED_OUT, _) -> loop (partition_set, acc)
+    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) -> loop (partition_set, acc)
     | exception e -> raise e
   in
   loop (PartitionSet.of_list partitions, seed)

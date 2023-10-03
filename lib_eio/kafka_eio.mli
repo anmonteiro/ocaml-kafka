@@ -24,7 +24,7 @@ module Stream : sig
   val drain_available : _ t -> unit
 end
 
-type 'a response = ('a, Kafka.error * string) result
+type 'a response = ('a, Kafka.Error.t * string) result
 
 module Producer : sig
   type t

@@ -21,43 +21,81 @@ type message =
 
 type msg_id = int
 
-type error =
-  (* Internal errors to rdkafka: *)
-  | BAD_MSG (* Received message is incorrect *)
-  | BAD_COMPRESSION (* Bad/unknown compression *)
-  | DESTROY (* Broker is going away *)
-  | FAIL (* Generic failure *)
-  | TRANSPORT (* Broker transport error *)
-  | CRIT_SYS_RESOURCE (* Critical system resource failure *)
-  | RESOLVE (* Failed to resolve broker.  *)
-  | MSG_TIMED_OUT (* Produced message timed out. *)
-  | UNKNOWN_PARTITION (* Permanent: Partition does not exist in cluster. *)
-  | FS (* File or filesystem error *)
-  | UNKNOWN_TOPIC (* Permanent: Topic does not exist  in cluster. *)
-  | ALL_BROKERS_DOWN (* All broker connections  are down. *)
-  | INVALID_ARG (* Invalid argument, or invalid configuration *)
-  | TIMED_OUT (* Operation timed out *)
-  | QUEUE_FULL (* Queue is full *)
-  | ISR_INSUFF (* ISR count < required.acks *)
-  (* Standard Kafka errors: *)
-  | UNKNOWN
-  | OFFSET_OUT_OF_RANGE
-  | INVALID_MSG
-  | UNKNOWN_TOPIC_OR_PART
-  | INVALID_MSG_SIZE
-  | LEADER_NOT_AVAILABLE
-  | NOT_LEADER_FOR_PARTITION
-  | REQUEST_TIMED_OUT
-  | BROKER_NOT_AVAILABLE
-  | REPLICA_NOT_AVAILABLE
-  | MSG_SIZE_TOO_LARGE
-  | STALE_CTRL_EPOCH
-  | OFFSET_METADATA_TOO_LARGE
-  (* Configuration errors *)
-  | CONF_UNKNOWN (* Unknown configuration name. *)
-  | CONF_INVALID (* Invalid configuration value. *)
+module Error = struct
+  type t =
+    (* Internal errors to rdkafka: *)
+    | BAD_MSG (* Received message is incorrect *)
+    | BAD_COMPRESSION (* Bad/unknown compression *)
+    | DESTROY (* Broker is going away *)
+    | FAIL (* Generic failure *)
+    | TRANSPORT (* Broker transport error *)
+    | CRIT_SYS_RESOURCE (* Critical system resource failure *)
+    | RESOLVE (* Failed to resolve broker.  *)
+    | MSG_TIMED_OUT (* Produced message timed out. *)
+    | UNKNOWN_PARTITION (* Permanent: Partition does not exist in cluster. *)
+    | FS (* File or filesystem error *)
+    | UNKNOWN_TOPIC (* Permanent: Topic does not exist  in cluster. *)
+    | ALL_BROKERS_DOWN (* All broker connections  are down. *)
+    | INVALID_ARG (* Invalid argument, or invalid configuration *)
+    | TIMED_OUT (* Operation timed out *)
+    | QUEUE_FULL (* Queue is full *)
+    | ISR_INSUFF (* ISR count < required.acks *)
+    (* Standard Kafka errors: *)
+    | UNKNOWN
+    | OFFSET_OUT_OF_RANGE
+    | INVALID_MSG
+    | UNKNOWN_TOPIC_OR_PART
+    | INVALID_MSG_SIZE
+    | LEADER_NOT_AVAILABLE
+    | NOT_LEADER_FOR_PARTITION
+    | REQUEST_TIMED_OUT
+    | BROKER_NOT_AVAILABLE
+    | REPLICA_NOT_AVAILABLE
+    | MSG_SIZE_TOO_LARGE
+    | STALE_CTRL_EPOCH
+    | OFFSET_METADATA_TOO_LARGE
+    (* Configuration errors *)
+    | CONF_UNKNOWN (* Unknown configuration name. *)
+    | CONF_INVALID (* Invalid configuration value. *)
 
-exception Error of error * string
+
+  let to_string = function
+    | BAD_MSG -> "BAD_MSG"
+    | BAD_COMPRESSION -> "BAD_COMPRESSION"
+    | DESTROY -> "DESTROY"
+    | FAIL  -> "FAIl"
+    | TRANSPORT -> "TRANSPORT"
+    | CRIT_SYS_RESOURCE -> "CRIT_SYS_RESOURCE"
+    | RESOLVE -> "RESOLVE"
+    | MSG_TIMED_OUT -> "MSG_TIMED_OUT"
+    | UNKNOWN_PARTITION -> "UNKNOWN_PARTITION"
+    | FS -> "FS"
+    | UNKNOWN_TOPIC -> "UNKNOWN_TOPIC"
+    | ALL_BROKERS_DOWN -> "ALL_BROKERS_DOWN"
+    | INVALID_ARG -> "INVALID_ARG"
+    | TIMED_OUT -> "TIMED_OUT"
+    | QUEUE_FULL -> "QUEUE_FULL"
+    | ISR_INSUFF -> "ISR_INSUFF"
+    | UNKNOWN -> "UNKNOWN"
+    | OFFSET_OUT_OF_RANGE-> "OFFSET_OUT_OF_RANGE"
+    | INVALID_MSG -> "INVALID_MSG"
+    | UNKNOWN_TOPIC_OR_PART -> "UNKNOWN_TOPIC_OR_PART"
+    | INVALID_MSG_SIZE -> "INVALID_MSG_SIZE"
+    | LEADER_NOT_AVAILABLE -> "LEADER_NOT_AVAILABLE"
+    | NOT_LEADER_FOR_PARTITION -> "NOT_LEADER_FOR_PARTITION"
+    | REQUEST_TIMED_OUT -> "REQUEST_TIMED_OUT"
+    | BROKER_NOT_AVAILABLE -> "BROKER_NOT_AVAILABLE"
+    | REPLICA_NOT_AVAILABLE-> "REPLICA_NOT_AVAILABLE"
+    | MSG_SIZE_TOO_LARGE-> "MSG_SIZE_TOO_LARGE"
+    | STALE_CTRL_EPOCH-> "STALE_CTRL_EPOCH"
+    | OFFSET_METADATA_TOO_LARGE-> "OFFSET_METADATA_TOO_LARGE"
+    | CONF_UNKNOWN -> "CONF_UNKNOWN"
+    | CONF_INVALID -> "CONF_INVALID"
+
+  let pp fmt t = Format.fprintf fmt "%s" (to_string t)
+end
+
+exception Error of Error.t * string
 
 let _ =
   Callback.register_exception "kafka.error" (Error (UNKNOWN, "msg string"))
@@ -66,7 +104,7 @@ external new_consumer : (string * string) list -> handler
   = "ocaml_kafka_new_consumer"
 
 external new_producer :
-  ?delivery_callback:(msg_id -> error option -> unit) ->
+  ?delivery_callback:(msg_id -> Error.t option -> unit) ->
   (string * string) list ->
   handler = "ocaml_kafka_new_producer"
 
@@ -186,7 +224,7 @@ module Rebalance = struct
   type op =
     | Assign
     | Unassign
-    | Unspecified of error
+    | Unspecified of Error.t
 
   let to_string = function
     | Assign -> "Assign"

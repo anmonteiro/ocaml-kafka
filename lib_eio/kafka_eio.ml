@@ -194,12 +194,12 @@ end
 
 let pending_table () = Hashtbl.create (8 * 1024)
 
-type 'a response = ('a, Kafka.error * string) result
+type 'a response = ('a, Kafka.Error.t * string) result
 
 module Producer = struct
   type t =
     { handle : Kafka.handler
-    ; pending_msg : (int, (unit, Kafka.error * string) result Promise.t * (unit, Kafka.error * string) result Promise.u) Hashtbl.t
+    ; pending_msg : (int, (unit, Kafka.Error.t * string) result Promise.t * (unit, Kafka.Error.t * string) result Promise.u) Hashtbl.t
     ; stop_poll : unit Promise.t * unit Promise.u
     }
 
@@ -208,7 +208,7 @@ module Producer = struct
   external poll' : Kafka.handler -> int = "ocaml_kafka_eio_poll"
 
   external new_producer' :
-     delivery_cb:(Kafka.msg_id -> Kafka.error option -> unit)
+     delivery_cb:(Kafka.msg_id -> Kafka.Error.t option -> unit)
     -> (string * string) list
     -> Kafka.handler response
     = "ocaml_kafka_eio_new_producer"
@@ -335,7 +335,7 @@ external subscribe' :
 
 let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
   match Hashtbl.mem consumer.subscriptions topic with
-  | true -> Error (Kafka.FAIL, "Already subscribed to this topic")
+  | true -> Error (Kafka.Error.FAIL, "Already subscribed to this topic")
   | false ->
     assert (not (Promise.is_resolved (fst consumer.start_poll)));
     Promise.resolve (snd consumer.start_poll) ();
@@ -364,7 +364,7 @@ let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
     | false -> Ok reader
     | true ->
       (match !subscribe_error with
-      | None -> Error (Kafka.FAIL, "Programmer error, subscribe_error unset")
+      | None -> Error (Kafka.Error.FAIL, "Programmer error, subscribe_error unset")
       | Some e -> Error e))
 
 let new_topic (producer : Producer.t) ?partitioner_callback name opts =

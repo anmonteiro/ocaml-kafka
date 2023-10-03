@@ -82,7 +82,7 @@ let test_produce_consume () =
 let test_consume_error () =
   Lwt.pick
     [
-      expect_error Kafka.TIMED_OUT (fun () ->
+      expect_error Kafka.Error.TIMED_OUT (fun () ->
           consume brokers topic_name [ random_msg () ]);
       timeout 2.0 "Fail to detect the error.";
     ]

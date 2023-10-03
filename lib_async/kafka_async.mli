@@ -2,7 +2,7 @@ open Async
 
 type producer
 type consumer
-type 'a response = ('a, Kafka.error * string) result
+type 'a response = ('a, Kafka.Error.t * string) result
 
 val produce :
   producer ->
