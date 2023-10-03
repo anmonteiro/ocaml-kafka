@@ -624,23 +624,6 @@ value ocaml_kafka_poll(value caml_kafka_handler, value caml_kafka_timeout)
   CAMLreturn(caml_count);
 }
 
-extern CAMLprim
-value ocaml_kafka_store_offset(value caml_kafka_topic, value caml_kafka_partition, value caml_kafka_offset)
-{
-  CAMLparam3(caml_kafka_topic,caml_kafka_partition,caml_kafka_offset);
-
-  rd_kafka_topic_t *topic = get_handler(caml_kafka_topic);
-  int32_t partition = Int_val(caml_kafka_partition);
-  int64_t offset = Int64_val(caml_kafka_offset);
-
-  rd_kafka_resp_err_t rd_errno = rd_kafka_offset_store(topic, partition, offset);
-  if (rd_errno) {
-     RAISE(rd_errno, "Failed to store offset (%s)", rd_kafka_err2str(rd_errno));
-  }
-
-  CAMLreturn(Val_unit);
-}
-
 /**
   A rdkafka queue handler is wrapped with a list of OCaml topics,
   so on message consuption we can return a plain OCaml topic handler.
@@ -948,7 +931,7 @@ value ocaml_kafka_get_librdkafka_version(value unit)
 }
 
 extern CAMLprim
-value ocaml_kafka_offset_store(value caml_kafka_topic, value caml_partition, value caml_offset)
+value ocaml_kafka_store_offset(value caml_kafka_topic, value caml_partition, value caml_offset)
 {
   CAMLparam3(caml_kafka_topic, caml_partition, caml_offset);
   rd_kafka_topic_t *rkt = get_handler(caml_kafka_topic);

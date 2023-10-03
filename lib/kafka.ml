@@ -174,9 +174,6 @@ external get_librdkafka_version : unit -> string
 
 let librdkafka_version = get_librdkafka_version ()
 
-external offset_store : topic -> partition -> offset -> unit
-  = "ocaml_kafka_offset_store"
-
 type partition_list
 
 external set_consumer_offset
