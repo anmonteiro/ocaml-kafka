@@ -242,6 +242,8 @@ let delivery_callback pending_msg_tbl msg_id error =
 
   let destroy t =
     let _, resolve_stop_poll = t.stop_poll in
+    Hashtbl.to_seq_values t.pending_msg |> Seq.iter (fun (_p, u) ->
+      Eio.Promise.resolve_error u (Kafka.Error.DESTROY, "Failed to wait for pending message"));
     Promise.resolve resolve_stop_poll ()
 end
 
@@ -312,7 +314,8 @@ module Consumer = struct
     | Error _ as e -> e
 
   let destroy t =
-    let _, resolve_stop_poll = t.stop_poll in
+    let stop_poll, resolve_stop_poll = t.stop_poll in
+    if not (Promise.is_resolved stop_poll) then
     Promise.resolve resolve_stop_poll ()
 end
 
