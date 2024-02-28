@@ -194,12 +194,10 @@ end
 
 let pending_table () = Hashtbl.create (8 * 1024)
 
-type 'a response = ('a, Kafka.Error.t * string) result
-
 module Producer = struct
   type t =
     { handle : Kafka.handler
-    ; pending_msg : (int, (unit, Kafka.Error.t * string) result Promise.t * (unit, Kafka.Error.t * string) result Promise.u) Hashtbl.t
+    ; pending_msg : (int, (unit, Kafka.Error.t) result Promise.t * (unit, Kafka.Error.t) result Promise.u) Hashtbl.t
     ; stop_poll : unit Promise.t * unit Promise.u
     }
 
@@ -208,9 +206,9 @@ module Producer = struct
   external poll' : Kafka.handler -> int = "ocaml_kafka_eio_poll"
 
   external new_producer' :
-     delivery_cb:(Kafka.msg_id -> Kafka.Error.t option -> unit)
+     delivery_cb:(Kafka.msg_id -> Kafka.Error.Raw.t option -> unit)
     -> (string * string) list
-    -> Kafka.handler response
+    -> (Kafka.handler, Kafka.Error.t) result
     = "ocaml_kafka_eio_new_producer"
 
 let delivery_callback pending_msg_tbl msg_id error =
@@ -221,7 +219,7 @@ let delivery_callback pending_msg_tbl msg_id error =
     | None ->
       Promise.resolve_ok u ()
     | Some error ->
-      Promise.resolve_error u (error, "Failed to produce message"))
+      Promise.resolve_error u (Kafka.Error.create error ~message:"Failed to produce message"))
   | exception Not_found -> ()
 
   let create ~clock ~sw ?(poll_interval = default_poll_interval) xs =
@@ -243,7 +241,8 @@ let delivery_callback pending_msg_tbl msg_id error =
   let destroy t =
     let _, resolve_stop_poll = t.stop_poll in
     Hashtbl.to_seq_values t.pending_msg |> Seq.iter (fun (_p, u) ->
-      Eio.Promise.resolve_error u (Kafka.Error.DESTROY, "Failed to wait for pending message"));
+      Promise.resolve_error u
+        (Kafka.Error.create DESTROY ~message:"Failed to wait for pending message"));
     Promise.resolve resolve_stop_poll ()
 end
 
@@ -260,12 +259,12 @@ module Consumer = struct
   external new_consumer' :
      ?rebalance_callback:(op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
     -> (string * string) list
-    -> Kafka.handler response
+    -> (Kafka.handler, Kafka.Error.t) result
     = "ocaml_kafka_eio_new_consumer"
 
   external poll' :
      Kafka.handler
-    -> Kafka.message option response
+    -> (Kafka.message option, Kafka.Error.t) result
     = "ocaml_kafka_eio_consumer_poll"
 
   let handle_incoming_message subscriptions = function
@@ -328,17 +327,18 @@ let produce (t : Producer.t) topic ?partition ?key msg =
   let p, u = Promise.create () in
   Hashtbl.replace t.pending_msg msg_id (p, u);
   Kafka.produce topic ?partition ?key ~msg_id msg;
-  p
+  Promise.await p
 
 external subscribe' :
    Kafka.handler
   -> topics:string list
-  -> unit response
+  -> (unit, Kafka.Error.t) result
   = "ocaml_kafka_eio_subscribe"
 
 let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
   match Hashtbl.mem consumer.subscriptions topic with
-  | true -> Error (Kafka.Error.FAIL, "Already subscribed to this topic")
+  | true ->
+    Error (Kafka.Error.create FAIL ~message:"Already subscribed to this topic")
   | false ->
     assert (not (Promise.is_resolved (fst consumer.start_poll)));
     Promise.resolve (snd consumer.start_poll) ();
@@ -367,10 +367,11 @@ let consume ~sw ~topic ?(capacity = 256) (consumer : Consumer.t) =
     | false -> Ok reader
     | true ->
       (match !subscribe_error with
-      | None -> Error (Kafka.Error.FAIL, "Programmer error, subscribe_error unset")
+      | None ->
+        Error (Kafka.Error.create FAIL ~message:"Programmer error, subscribe_error unset")
       | Some e -> Error e))
 
 let new_topic (producer : Producer.t) ?partitioner_callback name opts =
   match Kafka.new_topic ?partitioner_callback producer.handle name opts with
   | v -> Ok v
-  | exception Kafka.Error (e, msg) -> Error (e, msg)
+  | exception Kafka.Error e -> Error e

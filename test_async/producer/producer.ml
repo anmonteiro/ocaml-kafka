@@ -22,7 +22,7 @@ let main (brokers, topic, messages) =
 let main_or_error opts =
   match%bind main opts with
   | Ok _ as v -> return v
-  | Error (_, msg) -> return @@ Error (Error.of_string msg)
+  | Error {message= msg;_} -> return @@ Error (Error.of_string msg)
 
 let () =
   let open Command.Let_syntax in

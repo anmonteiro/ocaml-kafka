@@ -56,7 +56,7 @@ let timeout s err =
 
 let expect_error expected_err action =
   Lwt.catch action (function
-    | Kafka.Error (err, _) when err = expected_err -> return ()
+    | Kafka.Error {kafka_error=err; _} when err = expected_err -> return ()
     | exn -> Lwt.fail exn)
 
 let _ = Random.self_init ()
@@ -82,7 +82,7 @@ let test_produce_consume () =
 let test_consume_error () =
   Lwt.pick
     [
-      expect_error Kafka.Error.TIMED_OUT (fun () ->
+      expect_error Kafka.Error.Raw.TIMED_OUT (fun () ->
           consume brokers topic_name [ random_msg () ]);
       timeout 2.0 "Fail to detect the error.";
     ]

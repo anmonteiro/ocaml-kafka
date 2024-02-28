@@ -53,7 +53,7 @@ let delivery_callback msg_id error =
     | None -> Lwt.wakeup wakener ()
     | Some error ->
         Lwt.wakeup_exn wakener
-          (Kafka.Error (error, "Failed to produce message"))
+          (Kafka.Error (Kafka.Error.create error ~message:"Failed to produce message"))
   with Not_found -> ()
 
 let poll_delivery period_ms producer =

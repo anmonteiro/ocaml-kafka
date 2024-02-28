@@ -62,12 +62,12 @@ let main_result host port topic =
   in
   match Set.is_empty consumed with
   | true -> return ()
-  | false -> Deferred.return @@ Error (Kafka.Error.FAIL, "Not all messages consumed")
+  | false -> Deferred.return @@ Error (Kafka.Error.create FAIL ~message:"Not all messages consumed")
 
 let main_or_error host port topic =
   match%map main_result host port topic with
   | Ok _ as ok -> ok
-  | Error (_, msg) -> Error (Error.of_string msg)
+  | Error {message=msg;_} -> Error (Error.of_string msg)
 
 let main () =
   let open Command.Let_syntax in

@@ -24,8 +24,6 @@ module Stream : sig
   val drain_available : _ t -> unit
 end
 
-type 'a response = ('a, Kafka.Error.t * string) result
-
 module Producer : sig
   type t
 
@@ -34,7 +32,7 @@ module Producer : sig
     -> sw:Switch.t
     -> ?poll_interval:float
     -> (string * string) list
-    -> t response
+    -> (t, Kafka.Error.t) result
 
   val handle : t -> Kafka.handler
   val destroy : t -> unit
@@ -50,7 +48,7 @@ module Consumer : sig
          (op:Kafka.Rebalance.op -> Kafka.partition_list -> unit)
     -> ?poll_interval:float
     -> (string * string) list
-    -> t response
+    -> (t, Kafka.Error.t) result
 
   val handle : t -> Kafka.handler
   val destroy : t -> unit
@@ -62,18 +60,18 @@ val produce :
   -> ?partition:Kafka.partition
   -> ?key:string
   -> string
-  -> unit response Promise.t
+  -> (unit, Kafka.Error.t) result
 
 val new_topic :
    Producer.t
   -> ?partitioner_callback:(int -> string -> int option)
   -> string
   -> (string * string) list
-  -> Kafka.topic response
+  -> (Kafka.topic, Kafka.Error.t) result
 
 val consume :
    sw:Switch.t
   -> topic:string
   -> ?capacity:int
   -> Consumer.t
-  -> (Kafka.message, Stream.push) Stream.t response
+  -> ((Kafka.message, Stream.push) Stream.t, Kafka.Error.t) result

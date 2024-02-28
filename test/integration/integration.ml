@@ -23,7 +23,7 @@ let skip_all_message consume partition =
         print_endline "garbage removed!";
         loop ()
     | Kafka.PartitionEnd _ -> ()
-    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) -> ()
+    | exception Kafka.Error {kafka_error=TIMED_OUT; _} -> ()
   in
   loop ()
 
@@ -89,7 +89,7 @@ let main =
     | Kafka.PartitionEnd _ ->
         (* Printf.fprintf stderr "No message for now\n%!"; *)
         consume t p
-    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) ->
+    | exception Kafka.Error {kafka_error=TIMED_OUT; _} ->
         Printf.fprintf stderr "Timeout after: %d ms\n%!" timeout_ms;
         consume t p
   in
@@ -104,7 +104,7 @@ let main =
   | Kafka.PartitionEnd { topic = t; partition = p; _} ->
       assert (Kafka.topic_name t = "test");
       assert (p = partition)
-  | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) ->
+  | exception Kafka.Error {kafka_error=TIMED_OUT; _} ->
       assert
         (* enable.partition.eof must be set to true to catch partition end *)
         false
@@ -150,7 +150,7 @@ let main =
     | Kafka.PartitionEnd _ ->
         (* Printf.fprintf stderr "No queued message for now\n%!"; *)
         consume_queue (n, m)
-    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) ->
+    | exception Kafka.Error {kafka_error=TIMED_OUT; _} ->
         Printf.fprintf stderr "Queue timeout after: %d ms\n%!" timeout_ms;
         consume_queue (n, m)
   in
@@ -207,7 +207,7 @@ let main =
         (key, msg)
     | Kafka.Message { key = None; _ } | Kafka.PartitionEnd _ ->
         consume_k t
-    | exception Kafka.Error (Kafka.Error.TIMED_OUT, _) ->
+    | exception Kafka.Error {kafka_error=TIMED_OUT; _} ->
         Printf.fprintf stderr "Timeout after: %d ms\n%!" timeout_ms;
         consume_k t
   in

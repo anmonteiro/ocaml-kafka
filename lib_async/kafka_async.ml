@@ -3,7 +3,7 @@ open Async
 
 let pending_table = Int.Table.create ~size:(8 * 1024)
 
-type 'a response = ('a, Kafka.Error.t * string) result
+type 'a response = ('a, Kafka.Error.t) result
 
 type producer = {
   handler : Kafka.handler;
@@ -37,7 +37,7 @@ let produce (t : producer) topic ?partition ?key msg =
   Ivar.read ivar |> Deferred.ok
 
 external new_producer' :
-  (Kafka.msg_id -> Kafka.Error.t option -> unit) ->
+  (Kafka.msg_id -> Kafka.Error.Raw.t option -> unit) ->
   (string * string) list ->
   Kafka.handler response = "ocaml_kafka_async_new_producer"
 
@@ -90,7 +90,7 @@ external subscribe' : Kafka.handler -> topics:string list -> unit response
 let consume consumer ~topic =
   let open Result.Let_syntax in
   match Hashtbl.mem consumer.subscriptions topic with
-  | true -> Error (Kafka.Error.FAIL, "Already subscribed to this topic")
+  | true -> Error (Kafka.Error.create FAIL ~message:"Already subscribed to this topic")
   | false -> (
       Ivar.fill_if_empty consumer.start_poll ();
       let subscribe_error = ref None in
@@ -114,13 +114,13 @@ let consume consumer ~topic =
       | false -> return reader
       | true -> (
           match !subscribe_error with
-          | None -> Error (Kafka.Error.FAIL, "Programmer error, subscribe_error unset")
+          | None -> Error (Kafka.Error.create FAIL ~message:"Programmer error, subscribe_error unset")
           | Some e -> Error e))
 
 let new_topic (producer : producer) name opts =
   match Kafka.new_topic producer.handler name opts with
   | v -> Ok v
-  | exception Kafka.Error (e, msg) -> Error (e, msg)
+  | exception Kafka.Error kafka_error -> Error kafka_error
 
 let destroy_consumer consumer =
   Ivar.fill consumer.stop_poll ();
